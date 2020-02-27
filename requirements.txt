@@ -1,0 +1,4 @@
+pyperclip==1.7.0
+plyer==1.4.2
+black==19.3b0
+wxPython==4.0.4
