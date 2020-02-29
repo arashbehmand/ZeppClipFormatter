@@ -8,6 +8,7 @@ import wx
 import wx.adv
 from black import FileMode, format_str
 from plyer import notification
+from isort import SortImports
 
 APP_NAME = "ZeppClipFormatter"
 TRAY_ICON = "icon.ico"
@@ -21,8 +22,7 @@ def notify(message):
         app_icon=os.path.join(os.getcwd(), TRAY_ICON),
     )
 
-
-def is_pyspark_code_block(clipboard):
+def is_pyspark_format(clipboard):
     if clipboard.startswith("%pyspark-format"):
         return True
     return False
@@ -39,12 +39,26 @@ def format_with_black_to_clipboard(clipboard_content):
         notify("oops\n" + str(e))
     return None
 
+def is_pyspark_isort(clipboard):
+    if clipboard.startswith("%pyspark-isort"):
+        return True
+    return False
+
+def isort_imports_to_clipboard(clipboard_content):
+    clipboard_content = clipboard_content.lstrip("%pyspark-isort")
+    try:
+        res = SortImports(file_contents=clipboard_content).output
+        res = "%pyspark\n" + res
+        notify("done!")
+        return res
+    except Exception as e:
+        notify("oops\n" + str(e))
+    return None
 
 class ClipboardWatcher(threading.Thread):
-    def __init__(self, predicate, callback, pause=5.0):
+    def __init__(self, predicate_callbacks_list , pause=5.0):
         super(ClipboardWatcher, self).__init__()
-        self._predicate = predicate
-        self._callback = callback
+        self._predicate_callbacks_list = predicate_callbacks_list
         self._pause = pause
         self._stopping = False
 
@@ -54,11 +68,13 @@ class ClipboardWatcher(threading.Thread):
             tmp_value = pyperclip.paste()
             if tmp_value != recent_value:
                 recent_value = tmp_value
-                if self._predicate(recent_value):
-                    return_to_clipboard = self._callback(recent_value)
-                    if return_to_clipboard is not None:
-                        recent_value = return_to_clipboard
-                        pyperclip.copy(return_to_clipboard)
+                for (_predicate, _callback) in self._predicate_callbacks_list:
+                    if _predicate(recent_value):
+                        return_to_clipboard = _callback(recent_value)
+                        if return_to_clipboard is not None:
+                            recent_value = return_to_clipboard
+                            pyperclip.copy(return_to_clipboard)
+                        break
             time.sleep(self._pause)
 
     def stop(self):
@@ -109,8 +125,7 @@ class App(wx.App):
 
 
 def main():
-    watcher = ClipboardWatcher(
-        is_pyspark_code_block, format_with_black_to_clipboard, 0.05
+    watcher = ClipboardWatcher([(is_pyspark_format, format_with_black_to_clipboard), (is_pyspark_isort, isort_imports_to_clipboard)], 0.05
     )
     watcher.start()
 
