@@ -8,7 +8,7 @@ import wx
 import wx.adv
 from black import FileMode, format_str
 from plyer import notification
-from isort import SortImports
+import isort
 
 APP_NAME = "ZeppClipFormatter"
 TRAY_ICON = "icon.ico"
@@ -23,16 +23,19 @@ def notify(message):
     )
 
 def is_pyspark_format(clipboard):
-    if clipboard.startswith("%pyspark-format"):
+    if clipboard.startswith("%pyspark-format") or clipboard.startswith("#%format"):
         return True
     return False
 
 
 def format_with_black_to_clipboard(clipboard_content):
-    clipboard_content = clipboard_content.lstrip("%pyspark-format")
+    start_exp = ''
+    if clipboard_content.startswith("%pyspark-format"):
+        start_exp = '%pyspark\n'
+    clipboard_content = clipboard_content.lstrip("%pyspark-format").lstrip("#%format")
     try:
-        res = format_str(clipboard_content, mode=FileMode(line_length=80))
-        res = "%pyspark\n" + res
+        res = format_str(clipboard_content, mode=FileMode(line_length=100))
+        res = start_exp + res
         notify("done!")
         return res
     except Exception as e:
@@ -40,15 +43,18 @@ def format_with_black_to_clipboard(clipboard_content):
     return None
 
 def is_pyspark_isort(clipboard):
-    if clipboard.startswith("%pyspark-isort"):
+    if clipboard.startswith("%pyspark-isort") or clipboard.startswith("#%isort"):
         return True
     return False
 
 def isort_imports_to_clipboard(clipboard_content):
-    clipboard_content = clipboard_content.lstrip("%pyspark-isort")
+    start_exp = ''
+    if clipboard_content.startswith("%pyspark-isort"):
+        start_exp = '%pyspark\n'
+    clipboard_content = clipboard_content.lstrip("%pyspark-isort").lstrip("#%isort")
     try:
-        res = SortImports(file_contents=clipboard_content).output
-        res = "%pyspark\n" + res
+        res = isort.code(clipboard_content)
+        res = start_exp + res
         notify("done!")
         return res
     except Exception as e:
@@ -65,16 +71,19 @@ class ClipboardWatcher(threading.Thread):
     def run(self):
         recent_value = ""
         while not self._stopping:
-            tmp_value = pyperclip.paste()
-            if tmp_value != recent_value:
-                recent_value = tmp_value
-                for (_predicate, _callback) in self._predicate_callbacks_list:
-                    if _predicate(recent_value):
-                        return_to_clipboard = _callback(recent_value)
-                        if return_to_clipboard is not None:
-                            recent_value = return_to_clipboard
-                            pyperclip.copy(return_to_clipboard)
-                        break
+            try:
+                tmp_value = pyperclip.waitForNewPaste()
+                if tmp_value != recent_value:
+                    recent_value = tmp_value
+                    for (_predicate, _callback) in self._predicate_callbacks_list:
+                        if _predicate(recent_value):
+                            return_to_clipboard = _callback(recent_value)
+                            if return_to_clipboard is not None:
+                                recent_value = return_to_clipboard
+                                pyperclip.copy(return_to_clipboard)
+                            break
+            except pyperclip.PyperclipWindowsException:
+                pass
             time.sleep(self._pause)
 
     def stop(self):
