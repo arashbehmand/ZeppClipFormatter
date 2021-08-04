@@ -3,12 +3,13 @@ import os
 import threading
 import time
 
+import isort
 import pyperclip
 import wx
 import wx.adv
 from black import FileMode, format_str
+from isort.settings import Config
 from plyer import notification
-import isort
 
 APP_NAME = "ZeppClipFormatter"
 TRAY_ICON = "icon.ico"
@@ -22,17 +23,18 @@ def notify(message):
         app_icon=os.path.join(os.getcwd(), TRAY_ICON),
     )
 
+
 def is_pyspark_format(clipboard):
-    if clipboard.startswith("%pyspark-format") or clipboard.startswith("#%format"):
+    if clipboard.startswith("%pyspark-format") or clipboard.startswith("##format"):
         return True
     return False
 
 
 def format_with_black_to_clipboard(clipboard_content):
-    start_exp = ''
+    start_exp = ""
     if clipboard_content.startswith("%pyspark-format"):
-        start_exp = '%pyspark\n'
-    clipboard_content = clipboard_content.lstrip("%pyspark-format").lstrip("#%format")
+        start_exp = "%pyspark\n"
+    clipboard_content = clipboard_content.lstrip("%pyspark-format").lstrip("##format")
     try:
         res = format_str(clipboard_content, mode=FileMode(line_length=100))
         res = start_exp + res
@@ -42,18 +44,27 @@ def format_with_black_to_clipboard(clipboard_content):
         notify("oops\n" + str(e))
     return None
 
+
 def is_pyspark_isort(clipboard):
-    if clipboard.startswith("%pyspark-isort") or clipboard.startswith("#%isort"):
+    if clipboard.startswith("%pyspark-isort") or clipboard.startswith("##isort"):
         return True
     return False
 
+
 def isort_imports_to_clipboard(clipboard_content):
-    start_exp = ''
+    start_exp = ""
     if clipboard_content.startswith("%pyspark-isort"):
-        start_exp = '%pyspark\n'
-    clipboard_content = clipboard_content.lstrip("%pyspark-isort").lstrip("#%isort")
+        start_exp = "%pyspark\n"
+    clipboard_content = clipboard_content.lstrip("%pyspark-isort").lstrip("##isort")
     try:
-        res = isort.code(clipboard_content)
+        res = isort.code(
+            clipboard_content,
+            config=Config(
+                line_length=100,
+                multi_line_output=isort.wrap_modes.from_string("VERTICAL_GRID_GROUPED"),
+                group_by_package=True,
+            ),
+        )
         res = start_exp + res
         notify("done!")
         return res
@@ -61,8 +72,9 @@ def isort_imports_to_clipboard(clipboard_content):
         notify("oops\n" + str(e))
     return None
 
+
 class ClipboardWatcher(threading.Thread):
-    def __init__(self, predicate_callbacks_list , pause=5.0):
+    def __init__(self, predicate_callbacks_list, pause=5.0):
         super(ClipboardWatcher, self).__init__()
         self._predicate_callbacks_list = predicate_callbacks_list
         self._pause = pause
@@ -134,7 +146,8 @@ class App(wx.App):
 
 
 def main():
-    watcher = ClipboardWatcher([(is_pyspark_format, format_with_black_to_clipboard), (is_pyspark_isort, isort_imports_to_clipboard)], 0.05
+    watcher = ClipboardWatcher(
+        [(is_pyspark_format, format_with_black_to_clipboard), (is_pyspark_isort, isort_imports_to_clipboard)], 0.05
     )
     watcher.start()
 
